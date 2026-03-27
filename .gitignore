@@ -1,0 +1,51 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+.env
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+.coverage
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Private docs (keep off GitHub)
+business_strategy.txt
+investor_pitch.txt
+proposal_family.txt
+BENCHMARK_CHANGES.md
+LAUNCH_PLAN.md
+benchmark_74percent_baseline.py
+test_verdict*.py
+test_weissman_input.bin
+zstd_compress.py
+feature_comparison.html
+
+# Benchmark harness (competitive advantage)
+src/neuropack/benchmark/
+
+# User data
+.neuropack/
+
+# Temp
+*.tmp
+*.log

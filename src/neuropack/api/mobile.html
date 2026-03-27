@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0d0d0d">
+<link rel="manifest" href="/mobile/manifest.json">
+<title>NeuroPack</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0d0d0d;--bg2:#161622;--bg3:#1e1e30;--bg4:#282840;
+  --accent:#6c63ff;--accent2:#8b83ff;--accent-dim:rgba(108,99,255,0.15);
+  --text:#e8e6df;--text2:#a09e95;--text3:#6b6960;
+  --red:#ef4444;--green:#22c55e;--yellow:#eab308;--border:#2a2a3e;
+  --radius:10px;--radius-sm:6px;
+  --safe-b:env(safe-area-inset-bottom,0px);
+  --safe-t:env(safe-area-inset-top,0px);
+}
+html,body{height:100%;overflow:hidden}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text)}
+button{cursor:pointer;border:none;font-family:inherit;font-size:inherit;background:none;color:inherit}
+input,textarea{font-family:inherit;font-size:inherit;color:var(--text)}
+
+.app{display:flex;flex-direction:column;height:100%;padding-top:var(--safe-t)}
+
+/* Header */
+.header{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+.header h1{font-size:16px;font-weight:600}
+.header h1 span{color:var(--accent)}
+.status-dot{width:7px;height:7px;border-radius:50%;background:var(--red)}
+.status-dot.ok{background:var(--green)}
+
+/* Auth overlay */
+.auth-overlay{position:fixed;inset:0;background:var(--bg);z-index:100;display:flex;align-items:center;justify-content:center}
+.auth-box{padding:32px;text-align:center;max-width:320px}
+.auth-box h2{margin-bottom:8px;font-size:18px}
+.auth-box p{color:var(--text2);font-size:13px;margin-bottom:20px}
+.auth-box input{width:100%;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);outline:none;text-align:center;font-size:14px;margin-bottom:12px}
+.auth-box input:focus{border-color:var(--accent)}
+.auth-box .err{color:var(--red);font-size:12px;margin-bottom:8px;min-height:16px}
+
+/* Tab content */
+.tab-content{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.tab-panel{display:none;height:100%;flex-direction:column}
+.tab-panel.active{display:flex}
+
+/* Bottom nav */
+.nav{display:flex;border-top:1px solid var(--border);flex-shrink:0;padding-bottom:var(--safe-b);background:var(--bg2)}
+.nav button{flex:1;padding:10px 0 8px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;color:var(--text3);min-height:44px}
+.nav button.active{color:var(--accent)}
+.nav button svg{width:20px;height:20px}
+
+/* Shared */
+.btn{padding:10px 18px;border-radius:var(--radius-sm);font-weight:500;font-size:14px;min-height:44px}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:var(--accent2)}
+.btn-sm{padding:6px 12px;font-size:12px;min-height:32px;border-radius:4px}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px}
+.empty{text-align:center;padding:40px 20px;color:var(--text3);font-size:14px}
+.tag{display:inline-block;padding:2px 8px;background:var(--accent-dim);color:var(--accent2);border-radius:3px;font-size:11px;margin:2px}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ===== CHAT TAB ===== */
+.chat-messages{flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:8px}
+.msg{max-width:85%;padding:10px 14px;border-radius:16px;font-size:14px;line-height:1.45;word-wrap:break-word;overflow-wrap:anywhere}
+.msg.user{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:4px}
+.msg.assistant{align-self:flex-start;background:var(--bg3);border-bottom-left-radius:4px}
+.msg .mem-note{font-size:11px;color:var(--text3);margin-top:6px;cursor:pointer}
+.msg .mem-note:hover{color:var(--text2)}
+.chat-input{display:flex;gap:8px;padding:10px 16px;border-top:1px solid var(--border);flex-shrink:0;background:var(--bg2)}
+.chat-input input{flex:1;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:20px;outline:none;font-size:14px;min-height:44px}
+.chat-input input:focus{border-color:var(--accent)}
+.chat-input button{width:44px;height:44px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.chat-input button:disabled{opacity:0.4}
+.chat-input button svg{width:18px;height:18px;fill:#fff}
+.typing{align-self:flex-start;padding:10px 14px;background:var(--bg3);border-radius:16px;border-bottom-left-radius:4px;font-size:14px;color:var(--text3)}
+
+/* ===== STORE TAB ===== */
+.store-panel{padding:16px}
+.store-panel textarea{width:100%;height:120px;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);resize:vertical;outline:none;font-size:14px;margin-bottom:10px}
+.store-panel textarea:focus{border-color:var(--accent)}
+.store-panel .tag-input{width:100%;padding:10px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);outline:none;font-size:14px;margin-bottom:12px}
+.store-panel .tag-input:focus{border-color:var(--accent)}
+.store-panel .result{padding:12px;background:var(--bg2);border:1px solid var(--green);border-radius:var(--radius-sm);color:var(--green);font-size:13px;margin-top:10px}
+.store-panel .result.err{border-color:var(--red);color:var(--red)}
+
+/* ===== TASKS TAB ===== */
+.tasks-panel{display:flex;flex-direction:column;height:100%}
+.tasks-header{padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;gap:8px;align-items:center}
+.tasks-header select{padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;outline:none;flex:1;min-height:36px}
+.tasks-list{flex:1;overflow-y:auto;padding:12px 16px}
+.task-item{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:8px}
+.task-item .title{font-size:14px;font-weight:500;margin-bottom:4px}
+.task-item .meta{font-size:11px;color:var(--text3);display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.task-item .actions{display:flex;gap:6px}
+.status-badge{display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:600;text-transform:uppercase}
+.status-badge.open{background:rgba(108,99,255,0.15);color:var(--accent2)}
+.status-badge.claimed{background:rgba(234,179,8,0.15);color:var(--yellow)}
+.status-badge.done{background:rgba(34,197,94,0.15);color:var(--green)}
+.status-badge.blocked{background:rgba(239,68,68,0.15);color:var(--red)}
+.tasks-create{padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0;background:var(--bg2)}
+.tasks-create input{width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);outline:none;font-size:14px;min-height:44px}
+.tasks-create input:focus{border-color:var(--accent)}
+
+/* ===== BROWSE TAB ===== */
+.browse-panel{display:flex;flex-direction:column;height:100%}
+.browse-search{padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+.browse-search input{width:100%;padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);outline:none;font-size:14px}
+.browse-search input:focus{border-color:var(--accent)}
+.browse-results{flex:1;overflow-y:auto;padding:12px 16px}
+.mem-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:8px}
+.mem-card .l3{font-size:14px;margin-bottom:4px;line-height:1.4}
+.mem-card .meta{font-size:11px;color:var(--text3);margin-bottom:6px}
+.mem-card .tags{margin-bottom:4px}
+.mem-card .details{display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:13px;line-height:1.5;color:var(--text2);white-space:pre-wrap;overflow-wrap:anywhere}
+.btn-primary:disabled{opacity:0.5;cursor:default}
+.mem-card .details.open{display:block}
+.mem-card .expand-btn{font-size:11px;color:var(--accent);cursor:pointer}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+<!-- Auth Overlay -->
+<div class="auth-overlay" id="authOverlay" style="display:none">
+  <div class="auth-box">
+    <h2>NeuroPack</h2>
+    <p>Enter your API key to connect</p>
+    <div class="err" id="authErr"></div>
+    <input type="password" id="authKey" placeholder="np_..." autocomplete="off" autofocus aria-label="API Key">
+    <button class="btn btn-primary" style="width:100%" onclick="tryAuth()">Connect</button>
+  </div>
+</div>
+
+<!-- Header -->
+<div class="header">
+  <h1><span>N</span> NeuroPack</h1>
+  <div class="status-dot" id="statusDot"></div>
+</div>
+
+<!-- Chat Tab -->
+<div class="tab-panel active" id="tabChat">
+  <div class="chat-messages" id="chatMessages">
+    <div class="msg assistant">Hi! Ask me anything. I'll use your memories for context.</div>
+  </div>
+  <div class="chat-input">
+    <input type="text" id="chatInput" placeholder="Ask something..." autocomplete="off" aria-label="Message">
+    <button id="chatSend" onclick="sendChat()" aria-label="Send message">
+      <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- Store Tab -->
+<div class="tab-panel" id="tabStore">
+  <div class="store-panel" style="overflow-y:auto;flex:1">
+    <h3 style="margin-bottom:12px;font-size:15px">Save a Memory</h3>
+    <textarea id="storeContent" placeholder="What do you want to remember?"></textarea>
+    <input type="text" class="tag-input" id="storeTags" placeholder="Tags (comma separated)">
+    <button class="btn btn-primary" style="width:100%" onclick="saveMemory()">Save Memory</button>
+    <div id="storeResult" style="display:none"></div>
+  </div>
+</div>
+
+<!-- Tasks Tab -->
+<div class="tab-panel" id="tabTasks">
+  <div class="tasks-panel">
+    <div class="tasks-header">
+      <select id="wsSelect" onchange="loadTasks()">
+        <option value="">Select workspace...</option>
+      </select>
+      <button class="btn btn-sm btn-primary" onclick="showCreateWs()">+ New</button>
+    </div>
+    <div class="tasks-list" id="tasksList">
+      <div class="empty">Select or create a workspace</div>
+    </div>
+    <div class="tasks-create" id="tasksCreate" style="display:none">
+      <input type="text" id="newTaskInput" placeholder="New task title... (Enter to create)" autocomplete="off">
+    </div>
+  </div>
+</div>
+
+<!-- Browse Tab -->
+<div class="tab-panel" id="tabBrowse">
+  <div class="browse-panel">
+    <div class="browse-search">
+      <input type="text" id="browseQuery" placeholder="Search memories..." autocomplete="off">
+    </div>
+    <div class="browse-results" id="browseResults">
+      <div class="empty">Search or scroll to browse memories</div>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom Nav -->
+<nav class="nav">
+  <button class="active" onclick="switchTab('Chat',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+    Chat
+  </button>
+  <button onclick="switchTab('Store',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+    Store
+  </button>
+  <button onclick="switchTab('Tasks',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+    Tasks
+  </button>
+  <button onclick="switchTab('Browse',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+    Browse
+  </button>
+</nav>
+
+</div>
+
+<script>
+/* ===== CONFIG ===== */
+const BASE = location.origin;
+let API_KEY = localStorage.getItem('np_key') || '';
+const INJECTED_TOKEN = '__NP_AUTH_TOKEN__';
+
+/* ===== AUTH ===== */
+function headers() {
+  const h = {'Content-Type':'application/json'};
+  if (API_KEY) h['Authorization'] = 'Bearer ' + API_KEY;
+  return h;
+}
+
+function showAuth(msg) {
+  document.getElementById('authOverlay').style.display = 'flex';
+  if (msg) document.getElementById('authErr').textContent = msg;
+}
+
+function requireReauth() {
+  API_KEY = '';
+  localStorage.removeItem('np_key');
+  showAuth('Session expired. Please re-enter your API key.');
+}
+
+async function apiFetch(url, opts) {
+  const r = await fetch(url, opts);
+  if (r.status === 401 || r.status === 403) { requireReauth(); throw new Error('auth'); }
+  return r;
+}
+
+async function checkAuth() {
+  try {
+    const r = await fetch(BASE+'/health');
+    if (!r.ok) throw new Error();
+    document.getElementById('statusDot').classList.add('ok');
+    const r2 = await fetch(BASE+'/v1/stats', {headers: headers()});
+    if (r2.status === 401 || r2.status === 403) {
+      showAuth(API_KEY ? 'Key expired or invalid' : '');
+      if (API_KEY) { API_KEY = ''; localStorage.removeItem('np_key'); }
+      return;
+    }
+    document.getElementById('authOverlay').style.display = 'none';
+    initApp();
+  } catch(e) {
+    document.getElementById('statusDot').classList.remove('ok');
+    showAuth('Cannot reach server');
+  }
+}
+
+async function tryAuth() {
+  const key = document.getElementById('authKey').value.trim();
+  if (!key) return;
+  API_KEY = key;
+  try {
+    const r = await fetch(BASE+'/v1/stats', {headers: headers()});
+    if (r.ok) {
+      localStorage.setItem('np_key', key);
+      document.getElementById('authOverlay').style.display = 'none';
+      document.getElementById('authErr').textContent = '';
+      initApp();
+    } else {
+      document.getElementById('authErr').textContent = 'Invalid key';
+      API_KEY = '';
+    }
+  } catch(e) {
+    document.getElementById('authErr').textContent = 'Connection failed';
+    API_KEY = '';
+  }
+}
+
+document.getElementById('authKey').addEventListener('keydown', e => {
+  if (e.key === 'Enter') tryAuth();
+});
+
+/* ===== INIT ===== */
+function initApp() {
+  loadWorkspaces();
+  loadRecent();
+}
+
+/* ===== TABS ===== */
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab'+name).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'Tasks') loadWorkspaces();
+  if (name === 'Browse') loadRecent();
+}
+
+/* ===== CHAT ===== */
+let chatHistory = [];
+let chatBusy = false;
+
+document.getElementById('chatInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+});
+
+async function sendChat() {
+  if (chatBusy) return;
+  const input = document.getElementById('chatInput');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+
+  const container = document.getElementById('chatMessages');
+  appendMsg(container, 'user', esc(msg));
+  container.innerHTML += '<div class="typing" id="typingInd"><span class="spinner"></span></div>';
+  scrollBottom(container);
+
+  chatBusy = true;
+  document.getElementById('chatSend').disabled = true;
+
+  try {
+    const r = await apiFetch(BASE+'/v1/chat', {
+      method:'POST',
+      headers: headers(),
+      body: JSON.stringify({message: msg, history: chatHistory})
+    });
+    removeTyping();
+
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({detail:'Error'}));
+      appendMsg(container, 'assistant error', esc(err.detail || 'Error'));
+    } else {
+      const data = await r.json();
+      const memNote = data.memories_used > 0
+        ? '<div class="mem-note">Based on '+esc(String(data.memories_used))+' memories</div>'
+        : '';
+      appendMsg(container, 'assistant', esc(data.response) + memNote);
+      chatHistory.push({role:'user', content: msg});
+      chatHistory.push({role:'assistant', content: data.response});
+      if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
+    }
+  } catch(e) {
+    removeTyping();
+    if (e.message !== 'auth') appendMsg(container, 'assistant error', 'Connection error');
+  }
+
+  chatBusy = false;
+  document.getElementById('chatSend').disabled = false;
+  scrollBottom(container);
+  input.focus();
+}
+
+function appendMsg(container, cls, html) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + cls;
+  if (cls.includes('error')) div.style.color = 'var(--red)';
+  div.innerHTML = html;
+  container.appendChild(div);
+}
+
+function removeTyping() {
+  const ind = document.getElementById('typingInd');
+  if (ind) ind.remove();
+}
+
+function scrollBottom(el) {
+  requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
+}
+
+/* ===== STORE ===== */
+let storeBusy = false;
+
+async function saveMemory() {
+  if (storeBusy) return;
+  const content = document.getElementById('storeContent').value.trim();
+  if (!content) return;
+  const tagsRaw = document.getElementById('storeTags').value.trim();
+  const tags = tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : [];
+
+  const btn = document.querySelector('#tabStore .btn-primary');
+  const res = document.getElementById('storeResult');
+  storeBusy = true;
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+
+  try {
+    const r = await apiFetch(BASE+'/v1/memories', {
+      method:'POST',
+      headers: headers(),
+      body: JSON.stringify({content, tags})
+    });
+    if (!r.ok) throw new Error((await r.json()).detail || 'Failed');
+    const data = await r.json();
+    res.className = 'result';
+    res.textContent = 'Saved: ' + data.l3_abstract;
+    res.style.display = 'block';
+    document.getElementById('storeContent').value = '';
+    document.getElementById('storeTags').value = '';
+    document.getElementById('storeContent').focus();
+  } catch(e) {
+    if (e.message !== 'auth') {
+      res.className = 'result err';
+      res.textContent = e.message;
+      res.style.display = 'block';
+    }
+  }
+
+  storeBusy = false;
+  btn.disabled = false;
+  btn.textContent = 'Save Memory';
+}
+
+/* ===== TASKS ===== */
+let workspaces = [];
+let tasksBusy = false;
+
+async function loadWorkspaces() {
+  try {
+    const r = await apiFetch(BASE+'/v1/workspaces', {headers: headers()});
+    if (!r.ok) return;
+    const data = await r.json();
+    workspaces = data.workspaces || [];
+    const sel = document.getElementById('wsSelect');
+    const cur = sel.value;
+    // Build options safely using DOM API
+    sel.innerHTML = '';
+    const def = document.createElement('option');
+    def.value = ''; def.textContent = 'Select workspace...';
+    sel.appendChild(def);
+    workspaces.forEach(ws => {
+      const opt = document.createElement('option');
+      opt.value = ws.id;
+      opt.textContent = ws.name;
+      sel.appendChild(opt);
+    });
+    if (cur) { sel.value = cur; loadTasks(); }
+  } catch(e) {}
+}
+
+function showCreateWs() {
+  const name = prompt('Workspace name:');
+  if (!name) return;
+  const goal = prompt('Goal (optional):') || '';
+  createWorkspace(name, goal);
+}
+
+async function createWorkspace(name, goal) {
+  try {
+    const r = await apiFetch(BASE+'/v1/workspaces', {
+      method:'POST', headers: headers(),
+      body: JSON.stringify({name, goal})
+    });
+    if (!r.ok) throw new Error('Failed');
+    const data = await r.json();
+    await loadWorkspaces();
+    document.getElementById('wsSelect').value = data.id;
+    loadTasks();
+  } catch(e) { if (e.message !== 'auth') alert('Error: '+e.message); }
+}
+
+async function loadTasks() {
+  const wsId = document.getElementById('wsSelect').value;
+  const list = document.getElementById('tasksList');
+  const create = document.getElementById('tasksCreate');
+  if (!wsId) {
+    list.innerHTML = '<div class="empty">Select or create a workspace</div>';
+    create.style.display = 'none';
+    return;
+  }
+  create.style.display = 'block';
+
+  try {
+    const r = await apiFetch(BASE+'/v1/workspaces/'+encodeURIComponent(wsId)+'/tasks', {headers: headers()});
+    if (!r.ok) throw new Error();
+    const data = await r.json();
+    if (!data.tasks.length) {
+      list.innerHTML = '<div class="empty">No tasks yet</div>';
+      return;
+    }
+    list.innerHTML = data.tasks.map(t => {
+      const safeId = esc(t.id);
+      let actions = '';
+      if (t.status === 'open') {
+        actions = '<button class="btn btn-sm btn-primary" data-id="'+safeId+'" onclick="claimTask(this.dataset.id)">Claim</button>';
+      } else if (t.status === 'claimed') {
+        actions = '<button class="btn btn-sm btn-primary" data-id="'+safeId+'" onclick="completeTask(this.dataset.id)">Complete</button>';
+      }
+      return '<div class="task-item">'
+        +'<div class="title">'+esc(t.title)+'</div>'
+        +'<div class="meta"><span class="status-badge '+esc(t.status)+'">'+esc(t.status)+'</span>'
+        +(t.assigned_to ? '<span>'+esc(t.assigned_to)+'</span>' : '')
+        +'</div>'
+        +(t.description ? '<div style="font-size:13px;color:var(--text2);margin-bottom:8px">'+esc(t.description)+'</div>' : '')
+        +'<div class="actions">'+actions+'</div>'
+        +'</div>';
+    }).join('');
+  } catch(e) {
+    if (e.message !== 'auth') list.innerHTML = '<div class="empty" style="color:var(--red)">Error loading tasks</div>';
+  }
+}
+
+document.getElementById('newTaskInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    const title = e.target.value.trim();
+    if (!title) return;
+    e.target.value = '';
+    createTask(title);
+  }
+});
+
+async function createTask(title) {
+  if (tasksBusy) return;
+  const wsId = document.getElementById('wsSelect').value;
+  if (!wsId) return;
+  tasksBusy = true;
+  try {
+    await apiFetch(BASE+'/v1/workspaces/'+encodeURIComponent(wsId)+'/tasks', {
+      method:'POST', headers: headers(),
+      body: JSON.stringify({title})
+    });
+    loadTasks();
+  } catch(e) {}
+  tasksBusy = false;
+}
+
+async function claimTask(id) {
+  if (tasksBusy) return;
+  tasksBusy = true;
+  try {
+    await apiFetch(BASE+'/v1/workspaces/tasks/'+encodeURIComponent(id)+'/claim', {
+      method:'POST', headers: headers(),
+      body: JSON.stringify({})
+    });
+    loadTasks();
+  } catch(e) {}
+  tasksBusy = false;
+}
+
+async function completeTask(id) {
+  if (tasksBusy) return;
+  tasksBusy = true;
+  try {
+    await apiFetch(BASE+'/v1/workspaces/tasks/'+encodeURIComponent(id)+'/complete', {
+      method:'POST', headers: headers(),
+      body: JSON.stringify({})
+    });
+    loadTasks();
+  } catch(e) {}
+  tasksBusy = false;
+}
+
+/* ===== BROWSE ===== */
+let browseTimer = null;
+
+document.getElementById('browseQuery').addEventListener('input', e => {
+  clearTimeout(browseTimer);
+  browseTimer = setTimeout(() => {
+    const q = e.target.value.trim();
+    if (q.length >= 2) searchMemories(q);
+    else loadRecent();
+  }, 400);
+});
+
+async function loadRecent() {
+  try {
+    const r = await apiFetch(BASE+'/v1/memories?limit=20', {headers: headers()});
+    if (!r.ok) return;
+    const data = await r.json();
+    // /v1/memories returns array of MemoryListItem (no content_preview, no score)
+    renderMemories(data, false);
+  } catch(e) {}
+}
+
+async function searchMemories(q) {
+  try {
+    const r = await apiFetch(BASE+'/v1/recall', {
+      method:'POST', headers: headers(),
+      body: JSON.stringify({query: q, limit: 20})
+    });
+    if (!r.ok) return;
+    const data = await r.json();
+    // /v1/recall returns {results: RecallResultItem[]} (has content_preview, score)
+    renderMemories(data.results, true);
+  } catch(e) {}
+}
+
+function renderMemories(items, isSearch) {
+  const container = document.getElementById('browseResults');
+  if (!items || !items.length) {
+    container.innerHTML = '<div class="empty">'+(isSearch ? 'No results' : 'No memories yet')+'</div>';
+    return;
+  }
+  container.innerHTML = items.map(m => {
+    // MemoryListItem has l3_abstract; RecallResultItem also has content_preview
+    const title = m.l3_abstract || (isSearch ? m.content_preview : '') || '(untitled)';
+    const tags = (m.tags || []).map(t => '<span class="tag">'+esc(t)+'</span>').join('');
+    const score = isSearch && m.score != null ? ' - score: '+m.score.toFixed(2) : '';
+    const safeId = esc(m.id);
+    return '<div class="mem-card">'
+      +'<div class="l3">'+esc(title)+'</div>'
+      +'<div class="meta">'+esc(m.namespace || 'default')+score+'</div>'
+      +(tags ? '<div class="tags">'+tags+'</div>' : '')
+      +'<span class="expand-btn" data-id="'+safeId+'" onclick="toggleDetail(this,this.dataset.id)">Show more</span>'
+      +'<div class="details" id="det-'+safeId+'"></div>'
+      +'</div>';
+  }).join('');
+}
+
+async function toggleDetail(btn, id) {
+  const det = document.getElementById('det-'+id);
+  if (det.classList.contains('open')) {
+    det.classList.remove('open');
+    btn.textContent = 'Show more';
+    return;
+  }
+  btn.textContent = 'Loading...';
+  try {
+    const r = await apiFetch(BASE+'/v1/memories/'+encodeURIComponent(id), {headers: headers()});
+    if (!r.ok) throw new Error();
+    const m = await r.json();
+    let text = m.content || '';
+    if (m.l2_facts && m.l2_facts.length) {
+      text += '\n\n--- Facts ---\n' + m.l2_facts.map(f => '- '+f).join('\n');
+    }
+    det.textContent = text;
+    det.classList.add('open');
+    btn.textContent = 'Show less';
+  } catch(e) {
+    if (e.message !== 'auth') { det.textContent = 'Error loading details'; det.classList.add('open'); }
+    btn.textContent = 'Show more';
+  }
+}
+
+/* ===== UTILS ===== */
+function esc(s) {
+  if (!s) return '';
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+/* ===== BOOT ===== */
+if (INJECTED_TOKEN && INJECTED_TOKEN !== '__NP_AUTH_TOKEN__') {
+  API_KEY = INJECTED_TOKEN;
+}
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/mobile/sw.js').catch(() => {});
+}
+checkAuth();
+</script>
+</body>
+</html>

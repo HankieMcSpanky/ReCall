@@ -1,0 +1,17 @@
+services:
+  neuropack:
+    build: .
+    ports:
+      - "7341:7341"
+    volumes:
+      - neuropack-data:/data
+    environment:
+      - NEUROPACK_DB_PATH=/data/memories.db
+      - NEUROPACK_API_HOST=0.0.0.0
+      # Optional: set auth token
+      # - NEUROPACK_AUTH_TOKEN=your-secret-token
+      # Optional: set encryption key
+      # - NEUROPACK_ENCRYPTION_KEY=your-fernet-key
+
+volumes:
+  neuropack-data:

@@ -1,0 +1,14 @@
+__pycache__
+*.pyc
+*.pyo
+.git
+.pytest_cache
+.ruff_cache
+tests/
+*.egg-info
+dist/
+build/
+.env
+*.db
+neuropack-extension/
+research/

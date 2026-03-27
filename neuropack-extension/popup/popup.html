@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+
+<div class="header">
+  <h1><span>NP</span> NeuroPack</h1>
+  <div class="status">
+    <div class="dot" id="status-dot"></div>
+    <span id="status-text">...</span>
+  </div>
+</div>
+
+<div class="section">
+  <input type="search" id="search" placeholder="Search memories..." autocomplete="off">
+</div>
+
+<div class="section">
+  <div class="section-title">Quick Save</div>
+  <textarea id="save-content" placeholder="What to remember..."></textarea>
+  <div class="save-row">
+    <input type="text" id="save-tags" placeholder="Tags (comma sep)">
+    <button class="btn" id="save-btn">Save</button>
+  </div>
+</div>
+
+<div class="results" id="results">
+  <div class="section-title" id="results-title">Recent</div>
+  <div id="results-list"></div>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>

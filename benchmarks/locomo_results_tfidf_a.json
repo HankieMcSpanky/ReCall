@@ -1,0 +1,38 @@
+{
+  "overall_accuracy": 63.39,
+  "correct": 1259,
+  "total": 1986,
+  "by_type": {
+    "adversarial": {
+      "correct": 446,
+      "total": 446,
+      "accuracy": 100.0
+    },
+    "multi_hop": {
+      "correct": 61,
+      "total": 321,
+      "accuracy": 19.0
+    },
+    "open_domain": {
+      "correct": 597,
+      "total": 841,
+      "accuracy": 70.99
+    },
+    "single_hop": {
+      "correct": 134,
+      "total": 282,
+      "accuracy": 47.52
+    },
+    "temporal_reasoning": {
+      "correct": 21,
+      "total": 96,
+      "accuracy": 21.88
+    }
+  },
+  "avg_recall_ms": 26.5,
+  "median_recall_ms": 25.4,
+  "avg_ingest_s": 0.98,
+  "embedder": "tfidf",
+  "mode": "a",
+  "top_k": 20
+}
