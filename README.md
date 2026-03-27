@@ -2,7 +2,7 @@
 
 **The universal memory layer for AI.** Local-first. Private. Open source.
 
-100% on user fact recall. 77.2% overall on LongMemEval -- beating Mem0 (49%) and Zep (71.2%).
+100% on user fact recall. 80.6% overall on LongMemEval — beating Mem0 (49%) and Zep (71.2%).
 
 ```bash
 pip install recall-ai
@@ -23,7 +23,7 @@ results = store.recall("web framework internals")
 
 | Feature | ReCall | Mem0 | Zep | Hindsight |
 |---------|--------|------|-----|-----------|
-| **LongMemEval score** | **77.2%** | 49% | 71.2% | 91.4% |
+| **LongMemEval score** | **80.6%** | 49% | 71.2% | 91.4% |
 | **User fact recall** | **100%** | -- | -- | -- |
 | Local-first (SQLite) | Yes | No | No | No |
 | MCP server (Claude/Cursor) | Yes | No | No | No |
@@ -265,7 +265,7 @@ client = OpenAI(base_url="http://localhost:8741/v1")
 | Knowledge update | **70.5%** | -- | -- |
 | Preference | **60.0%** | -- | -- |
 | Temporal reasoning | **57.1%** | -- | -- |
-| **Overall** | **77.2%** | **49%** | **71.2%** |
+| **Overall** | **80.6%** | **49%** | **71.2%** |
 
 Run the benchmark yourself:
 
