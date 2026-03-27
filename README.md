@@ -26,7 +26,7 @@ results = store.recall("web framework internals")
 | **LongMemEval score** | **80.6%** | 49% | 71.2% | 91.4% |
 | **User fact recall** | **100%** | -- | -- | -- |
 | Local-first (SQLite) | Yes | No | No | No |
-| MCP server (Claude/Cursor) | Yes | No | No | No |
+| MCP server (Claude/Copilot/Cursor) | Yes | No | No | No |
 | Local LLM support (Ollama) | Yes | No | No | No |
 | LLM proxy (auto-capture) | Yes | No | No | No |
 | Developer DNA profiling | Yes | No | No | No |
@@ -165,10 +165,15 @@ np doctor                  # Health check
 
 ## MCP Server
 
-ReCall ships an MCP server for Claude Desktop, Cursor, and any MCP client.
+ReCall ships an MCP server for Claude Desktop, VS Code Copilot, Cursor, and any MCP client.
 
 ```bash
-neuropack-mcp
+# Auto-setup (configures all supported clients)
+python setup_claude.py
+
+# Or setup individually
+python setup_claude.py claude     # Claude Desktop only
+python setup_claude.py copilot    # VS Code Copilot only
 ```
 
 ### Claude Desktop
@@ -184,6 +189,23 @@ Add to `claude_desktop_config.json`:
   }
 }
 ```
+
+### VS Code Copilot
+
+Add to `.vscode/mcp.json` in your project:
+
+```json
+{
+  "servers": {
+    "recall": {
+      "type": "stdio",
+      "command": "neuropack-mcp"
+    }
+  }
+}
+```
+
+Then enable `"chat.mcp.enabled": true` in VS Code settings and use Copilot in **Agent mode**.
 
 ### Cursor
 
@@ -203,10 +225,10 @@ Available tools: `remember`, `recall`, `forget`, `list_memories`, `memory_stats`
 
 ## Integrations
 
-### Claude Desktop / Cursor (MCP)
+### Claude Desktop / VS Code Copilot / Cursor (MCP)
 
-```json
-{ "mcpServers": { "recall": { "command": "neuropack-mcp" } } }
+```bash
+python setup_claude.py   # auto-configures all clients
 ```
 
 ### Ollama (fully local, zero cost)
