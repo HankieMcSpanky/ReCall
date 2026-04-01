@@ -378,6 +378,7 @@ class MemoryStore:
 
         # Contradiction detection
         contradiction_warnings: list[str] = []
+        superseded_ids: list[str] = []
         if self.config.contradiction_check:
             candidates = self._retriever.recall(
                 query=public_content, limit=5, min_score=self.config.contradiction_threshold,
@@ -389,6 +390,10 @@ class MemoryStore:
                 contradiction_warnings.append(
                     f"Possible contradiction with {c.existing_id[:8]}...: {c.reason}"
                 )
+                # Write-time fact supersession: if high-confidence contradiction,
+                # mark the old memory as superseded by the new one.
+                if c.confidence > 0.5:
+                    superseded_ids.append(c.existing_id)
 
         # Trust scoring
         trust_warnings: list[str] = []
@@ -474,6 +479,13 @@ class MemoryStore:
         self._index.add(memory_id, embedding)
         self._embedder.update_idf(public_content)
         self._repo.save_metadata("embedder_state", self._embedder.save_state())
+
+        # Write-time fact supersession: mark old contradicted memories as superseded
+        for old_id in superseded_ids:
+            try:
+                self._repo.update(old_id, superseded_by=memory_id)
+            except Exception:
+                pass  # Best-effort; don't fail the store if supersession update fails
 
         if self._kg:
             self._kg.process_memory(record)

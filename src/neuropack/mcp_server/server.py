@@ -1175,6 +1175,180 @@ def proxy_status() -> dict:
     }
 
 
+# --- Image Processing ---
+
+
+@mcp.tool()
+def remember_screenshot(
+    image_path: str,
+    description: str = "",
+    tags: list[str] | None = None,
+) -> dict:
+    """Store a screenshot or image as a searchable memory.
+
+    The image is saved to ~/.neuropack/images/ and its content is
+    extracted (via OCR if available) and stored as a text memory.
+    You can provide a description to help with future recall.
+
+    Call this when the user shares a screenshot, diagram, or image
+    that contains useful information worth remembering.
+
+    Args:
+        image_path: Path to the image file
+        description: Optional description of what the image shows
+        tags: Optional tags for categorization
+    """
+    store = _get_store()
+
+    try:
+        from neuropack.io.connectors.image import process_image
+        memory_dict = process_image(image_path, store_copy=True)
+    except Exception as e:
+        # Fallback: just store the description
+        memory_dict = {
+            "content": f"Screenshot: {image_path}",
+            "tags": ["image", "screenshot"],
+            "source": f"image:{image_path}",
+            "priority": 0.4,
+        }
+
+    # Enhance with user-provided description
+    if description:
+        memory_dict["content"] = f"{description}\n\n{memory_dict['content']}"
+        memory_dict["l3_override"] = description
+
+    if tags:
+        memory_dict.setdefault("tags", []).extend(tags)
+
+    record = store.store(**memory_dict)
+    return {
+        "id": record.id,
+        "summary": record.l3_abstract,
+        "status": "stored",
+    }
+
+
+# --- Auto-capture: Interaction Logging ---
+
+
+@mcp.tool()
+def log_interaction(
+    summary: str,
+    actions: list[str] | None = None,
+    outcome: str = "",
+    tags: list[str] | None = None,
+    full_conversation: str = "",
+) -> dict:
+    """Automatically log an AI interaction for future debugging and recall.
+
+    Call this after every significant action (code changes, decisions, config
+    changes, troubleshooting). This builds a searchable history so users can
+    later ask "what changed?" or "when did this break?"
+
+    You SHOULD call this proactively — don't wait to be asked.
+
+    Args:
+        summary: One-line summary of what was asked and done
+        actions: List of specific actions taken (files modified, commands run, decisions made)
+        outcome: Result — "success", "partial", "failed", or a short description
+        tags: Topic tags for filtering (e.g. ["auth", "bugfix", "config"])
+        full_conversation: Optional full Q&A text for deep zoom-in later
+    """
+    store = _get_store()
+
+    # Build structured content with zoom levels built in
+    parts = [f"## {summary}"]
+    if actions:
+        parts.append("\nActions:")
+        for action in actions:
+            parts.append(f"- {action}")
+    if outcome:
+        parts.append(f"\nOutcome: {outcome}")
+    if full_conversation:
+        parts.append(f"\n---\nFull conversation:\n{full_conversation}")
+
+    content = "\n".join(parts)
+
+    all_tags = ["interaction", "auto-log"]
+    if tags:
+        all_tags.extend(tags)
+
+    record = store.store(
+        content=content,
+        tags=all_tags,
+        source="mcp-auto",
+        priority=0.4,
+        l3_override=summary,
+        l2_override=actions,
+        memory_type="observation",
+        staleness="stable",
+    )
+    return {
+        "id": record.id,
+        "summary": summary,
+        "status": "logged",
+    }
+
+
+@mcp.tool()
+def what_changed(
+    topic: str,
+    time_range: str = "last week",
+    limit: int = 10,
+) -> dict:
+    """Search past AI interactions to find what changed and when.
+
+    Use this when debugging issues like "it used to work" or "when did this break?"
+    Returns a timeline of relevant interactions with summaries.
+
+    Args:
+        topic: What to search for (e.g. "authentication", "database config")
+        time_range: How far back to look ("today", "last week", "last month", "all")
+        limit: Maximum results to return
+    """
+    store = _get_store()
+
+    # Search interactions specifically
+    results = store.recall(
+        query=f"{topic} changes modifications",
+        limit=limit * 2,
+        tags=["interaction"],
+    )
+
+    # Also search general memories for context
+    general = store.recall(query=topic, limit=limit)
+
+    # Build timeline from interactions
+    interactions = []
+    for r in results[:limit]:
+        interactions.append({
+            "id": r.record.id,
+            "summary": r.record.l3_abstract,
+            "details": r.record.l2_facts,
+            "date": r.record.created_at if hasattr(r.record, "created_at") else "",
+            "tags": r.record.tags,
+            "score": round(r.score, 4),
+        })
+
+    # Related context from general memories
+    context = []
+    for r in general[:5]:
+        if r.record.id not in {i["id"] for i in interactions}:
+            context.append({
+                "id": r.record.id,
+                "summary": r.record.l3_abstract,
+                "type": r.record.memory_type,
+            })
+
+    return {
+        "topic": topic,
+        "interactions_found": len(interactions),
+        "timeline": interactions,
+        "related_context": context,
+        "hint": "Use fetch_details(id) to zoom into full conversation",
+    }
+
+
 def main():
     global _store
     config = NeuropackConfig()

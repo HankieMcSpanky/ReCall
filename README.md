@@ -2,7 +2,7 @@
 
 **The universal memory layer for AI.** Local-first. Private. Open source.
 
-100% on user fact recall. 80.6% overall on LongMemEval — beating Mem0 (49%) and Zep (71.2%).
+**80.6% on LongMemEval** with full ingestion pipeline (19,195 sessions → 19,195 memories).
 
 ```bash
 pip install recall-ai
@@ -19,25 +19,30 @@ results = store.recall("web framework internals")
 
 ---
 
-## How ReCall Compares
+## Features
 
-| Feature | ReCall | Mem0 | Zep | Hindsight |
-|---------|--------|------|-----|-----------|
-| **LongMemEval score** | **80.6%** | 49% | 71.2% | 91.4% |
-| **User fact recall** | **100%** | -- | -- | -- |
-| Local-first (SQLite) | Yes | No | No | No |
-| MCP server (Claude/Copilot/Cursor) | Yes | No | No | No |
-| Local LLM support (Ollama) | Yes | No | No | No |
-| LLM proxy (auto-capture) | Yes | No | No | No |
-| Developer DNA profiling | Yes | No | No | No |
-| Anticipatory context | Yes | No | No | No |
-| Memory diffing & time travel | Yes | No | Partial | No |
-| Git hooks + shell integration | Yes | No | No | No |
-| Obsidian sync | Yes | No | No | No |
-| Multi-agent workspaces | Yes | No | No | No |
-| PII detection + encryption | Free | Enterprise$ | Enterprise$ | No |
-| CLI tool | Yes | No | No | No |
-| Price | **Free** | $19-249/mo | $25-475/mo | Free |
+| Feature | Details |
+|---------|---------|
+| **LongMemEval benchmark** | 80.6% overall, 98.6% user fact recall |
+| Local-first (SQLite) | All data stays on your machine |
+| MCP server | Works with Claude Desktop, VS Code Copilot, Cursor |
+| Local LLM support | Ollama, LM Studio, Jan, llama.cpp, vLLM, and more |
+| LLM proxy (auto-capture) | Point your apps at ReCall, all conversations stored |
+| Interaction logging | Searchable history of what your AI did and when |
+| Memory Librarian | Structured fact cards with auto-supersession |
+| Pattern detection | Detects behavioral patterns over time |
+| Forgetting curve | Ebbinghaus-style decay with access reinforcement |
+| Predictive pre-loading | Anticipates what memories you'll need next |
+| Knowledge graph | Entity extraction, temporal edges, cross-entity inference |
+| Memory diffing & time travel | See what changed between any two points in time |
+| Developer DNA profiling | Statistical profile of your coding style |
+| Git hooks + shell integration | Auto-capture from terminal and git |
+| Obsidian + Logseq + Notion sync | Bidirectional sync with your notes |
+| DB rotation | Monthly archival with auto-consolidation |
+| PII detection + encryption | Block, redact, or warn on sensitive data |
+| Multi-agent workspaces | Task boards, handoffs, decision logs |
+| CLI tool | Full-featured command line interface |
+| Price | **Free and open source** |
 
 ---
 
@@ -279,21 +284,30 @@ client = OpenAI(base_url="http://localhost:8741/v1")
 
 ## Benchmark Results (LongMemEval)
 
-| Category | ReCall | Mem0 | Zep |
-|----------|--------|------|-----|
-| User facts | **100%** | -- | -- |
-| Assistant facts | **96.4%** | -- | -- |
-| Multi-session | **85.0%** | -- | -- |
-| Knowledge update | **70.5%** | -- | -- |
-| Preference | **60.0%** | -- | -- |
-| Temporal reasoning | **57.1%** | -- | -- |
-| **Overall** | **80.6%** | **49%** | **71.2%** |
+Full pipeline: ingest → store → recall → answer. Real ingestion, real retrieval.
+
+| Category | Score |
+|----------|-------|
+| User fact recall | **98.6%** |
+| Assistant fact recall | **98.2%** |
+| Multi-session | **81.2%** |
+| Knowledge update | **73.1%** |
+| Preference | **76.7%** |
+| Temporal reasoning | **73.7%** |
+| **Overall** | **80.6%** |
+
+```
+Ingestion: 19,195 sessions → 19,195 memories (407s)
+```
 
 Run the benchmark yourself:
 
 ```bash
-np benchmark --variant s --model gpt-4o     # Full run (requires OpenAI key)
-np benchmark --estimate                      # Free offline estimate (no API costs)
+# Full pipeline (tests the real product)
+np benchmark --full-pipeline --model gpt-5-mini --extraction-model gpt-4o-mini --judge-model gpt-4o-mini
+
+# Free offline estimate (no API costs)
+np benchmark --estimate
 ```
 
 ---

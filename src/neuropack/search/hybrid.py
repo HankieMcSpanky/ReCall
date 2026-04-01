@@ -271,6 +271,10 @@ class HybridRetriever:
             priority_adj = self._priority.adjusted_priority(record)
             final_score = rrf_score * (0.5 + 0.5 * priority_adj)
 
+            # Supersession demotion: reduce score of memories that have been superseded
+            if record.superseded_by is not None:
+                final_score *= 0.5
+
             if final_score < min_score:
                 continue
 

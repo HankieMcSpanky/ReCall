@@ -653,6 +653,104 @@ def llm_set_default(ctx: click.Context, name: str) -> None:
 # --- Agent commands ---
 
 
+# --- History commands ---
+
+
+@cli.command("history")
+@click.argument("query")
+@click.option("--limit", "-l", default=10, type=int, help="Max results")
+@click.option("--all-archives", is_flag=True, help="Also search archived months")
+@click.pass_context
+def history_cmd(ctx: click.Context, query: str, limit: int, all_archives: bool) -> None:
+    """Search past AI interactions. Use to find what changed and when.
+
+    Examples:
+        np history "authentication"
+        np history "database config" --limit 20
+        np history "deploy" --all-archives
+    """
+    ms: MemoryStore = ctx.obj["store"]
+
+    # Search interaction-tagged memories first
+    results = ms.recall(query=f"{query}", limit=limit * 2, tags=["interaction"])
+    if not results:
+        # Fall back to general search
+        results = ms.recall(query=query, limit=limit)
+
+    if not results:
+        click.echo("No matching interactions found.")
+        if not all_archives:
+            click.echo("Tip: use --all-archives to search older months")
+        return
+
+    for r in results[:limit]:
+        date = r.record.created_at if hasattr(r.record, "created_at") else "?"
+        tags = ", ".join(t for t in r.record.tags if t not in ("interaction", "auto-log"))
+        click.echo(f"  [{date}] {r.record.l3_abstract}")
+        if r.record.l2_facts:
+            for fact in r.record.l2_facts[:3]:
+                click.echo(f"    - {fact}")
+        if tags:
+            click.echo(f"    tags: {tags}")
+        click.echo(f"    id: {r.record.id}  score: {r.score:.3f}")
+        click.echo()
+
+    if all_archives:
+        from neuropack.core.rotation import DBRotator
+        rotator = DBRotator(ms.config.db_path)
+        archive_results = rotator.search_archives(query, limit=limit)
+        if archive_results:
+            click.echo(f"--- Archive results ({len(archive_results)}) ---")
+            for ar in archive_results:
+                click.echo(f"  [{ar['archive']}] {ar['summary']}")
+                click.echo(f"    score: {ar['score']}")
+                click.echo()
+
+
+@cli.command("rotate")
+@click.option("--dry-run", is_flag=True, help="Show what would happen without doing it")
+@click.option("--no-consolidate", is_flag=True, help="Skip consolidation of archived DB")
+@click.pass_context
+def rotate_cmd(ctx: click.Context, dry_run: bool, no_consolidate: bool) -> None:
+    """Rotate the current database to monthly archive.
+
+    Archives the current month's DB and starts fresh. Runs auto-consolidation
+    on the archived DB to merge similar memories.
+    """
+    ms: MemoryStore = ctx.obj["store"]
+    from neuropack.core.rotation import DBRotator
+
+    rotator = DBRotator(ms.config.db_path)
+
+    if dry_run:
+        if rotator.should_rotate():
+            click.echo("Rotation needed — current DB is from a previous month.")
+        else:
+            click.echo("No rotation needed — DB is from current month.")
+        archives = rotator.list_archives()
+        if archives:
+            click.echo(f"\nExisting archives ({len(archives)}):")
+            for a in archives:
+                status = "compressed" if a["compressed"] else "searchable"
+                click.echo(f"  {a['file']}  ({a['size_mb']} MB, {status})")
+        return
+
+    ms.close()  # Close store before rotating
+    result = rotator.rotate(consolidate=not no_consolidate)
+    if result:
+        click.echo(f"Rotated to: {result}")
+        click.echo("New database created. Restart any running services.")
+    else:
+        click.echo("No rotation needed.")
+
+    archives = rotator.list_archives()
+    if archives:
+        click.echo(f"\nArchives ({len(archives)}):")
+        for a in archives:
+            status = "compressed" if a["compressed"] else "searchable"
+            click.echo(f"  {a['file']}  ({a['size_mb']} MB, {status})")
+
+
 # --- Audit commands ---
 
 
@@ -1180,12 +1278,13 @@ def anticipate_cmd(ctx: click.Context, budget: int) -> None:
 @click.option("--observations", is_flag=True, help="Extract structured observations from sessions before answering (heuristic, zero cost)")
 @click.option("--observations-llm", is_flag=True, help="Use LLM for observation extraction instead of heuristics (costs ~$2-3)")
 @click.option("--extraction-model", default="", help="Model for observation extraction (default: same as --model). Supports ollama:model_name for local extraction.")
+@click.option("--full-pipeline", is_flag=True, help="Full pipeline: ingest into MemoryStore, recall, answer. Tests the real product.")
 @click.pass_context
 def benchmark_cmd(ctx: click.Context, variant: str, model: str, data_dir: str,
                   skip_ingest: bool, output: str, estimate: bool, limit: int,
                   context_injection: bool, judge_model: str,
                   observations: bool, observations_llm: bool,
-                  extraction_model: str) -> None:
+                  extraction_model: str, full_pipeline: bool) -> None:
     """Run the LongMemEval benchmark against ReCall.
 
     Downloads the dataset (if needed), ingests conversation sessions,
@@ -1265,7 +1364,9 @@ def benchmark_cmd(ctx: click.Context, variant: str, model: str, data_dir: str,
             eta = ""
         click.echo(f"\r  [{stage}] {current}/{total} ({pct:.0f}%){eta}", nl=(current == total))
 
-    if observations or observations_llm:
+    if full_pipeline:
+        mode = "full-pipeline"
+    elif observations or observations_llm:
         mode = "observations-llm" if observations_llm else "observations"
     elif context_injection:
         mode = "context-injection"
@@ -1287,6 +1388,7 @@ def benchmark_cmd(ctx: click.Context, variant: str, model: str, data_dir: str,
             observations=observations or observations_llm,
             observations_llm=observations_llm,
             extraction_model=extraction_model or model,
+            full_pipeline=full_pipeline,
             progress_callback=progress,
         )
     except FileNotFoundError as e:
@@ -1306,10 +1408,41 @@ def benchmark_cmd(ctx: click.Context, variant: str, model: str, data_dir: str,
     if re_retrieval_count > 0:
         click.echo(f"\n  Agentic re-retrieval: {re_retrieval_count}/{result.total_questions} questions needed a second retrieval pass")
 
+    # Always save detailed results for analysis
+    from pathlib import Path
+    auto_save_dir = Path.home() / ".neuropack" / "benchmark_results"
+    auto_save_dir.mkdir(parents=True, exist_ok=True)
+    ts = result.timestamp.replace(":", "-").replace("+", "_")[:19]
+    auto_path = auto_save_dir / f"results_{ts}.json"
+    try:
+        auto_path.write_text(json.dumps(format_benchmark_json(result), indent=2), encoding="utf-8")
+        click.echo(f"\n  Detailed results: {auto_path}")
+    except Exception:
+        pass
+
+    # Also print failure summary per category
+    if result.details:
+        click.echo("\n  Failed questions:")
+        by_cat: dict[str, list] = {}
+        for d in result.details:
+            if not d.get("correct", True):
+                cat = d.get("category", "unknown")
+                by_cat.setdefault(cat, []).append(d)
+        for cat in sorted(by_cat.keys()):
+            fails = by_cat[cat]
+            click.echo(f"    {cat} ({len(fails)} wrong):")
+            for f in fails[:3]:
+                q = f.get("question", "")[:70]
+                click.echo(f"      Q: {q}")
+                hyp = str(f.get("hypothesis", ""))[:80]
+                gold = str(f.get("gold_answer", ""))[:80]
+                click.echo(f"      Got: {hyp}")
+                click.echo(f"      Expected: {gold}")
+            if len(fails) > 3:
+                click.echo(f"      ... and {len(fails) - 3} more")
+
     # Save JSON if requested
     if output:
-        from pathlib import Path
-
         out_path = Path(output)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(json.dumps(format_benchmark_json(result), indent=2), encoding="utf-8")

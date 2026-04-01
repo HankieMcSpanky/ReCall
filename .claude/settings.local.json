@@ -44,7 +44,11 @@
       "Bash(pip install:*)",
       "Bash(ollama list:*)",
       "Bash(curl -s http://localhost:11434/api/tags)",
-      "Bash(rc setup:*)"
+      "Bash(rc setup:*)",
+      "Read(//c/Users/hnrkh/.neuropack/**)",
+      "Bash(find C:/Users/hnrkh/Downloads/src/ -type f -name *.ts -o -name *.js -o -name *.py -o -name *.json)",
+      "Bash(xargs grep:*)",
+      "Bash(find C:/Users/hnrkh/Downloads/src/ -path *proactive* -type f)"
     ]
   }
 }

@@ -12,9 +12,19 @@ The calendar can answer temporal questions directly:
 """
 from __future__ import annotations
 
+import calendar as _cal
 import re
 from datetime import datetime, timedelta
 from typing import Optional
+
+# Month-name lookup for parsing temporal cues in questions
+_MONTH_NAMES = {
+    "january": 1, "february": 2, "march": 3, "april": 4,
+    "may": 5, "june": 6, "july": 7, "august": 8,
+    "september": 9, "october": 10, "november": 11, "december": 12,
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4,
+    "jun": 6, "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
 
 
 class VirtualCalendar:
@@ -33,6 +43,7 @@ class VirtualCalendar:
         session_id: str = "",
         session_idx: int = 0,
         speaker: str = "user",
+        raw_expression: str = "",
     ) -> None:
         """Add an event to the calendar."""
         actual_date = event_date or session_date
@@ -43,6 +54,7 @@ class VirtualCalendar:
             session_id=session_id,
             session_idx=session_idx,
             speaker=speaker,
+            raw_expression=raw_expression,
         )
         self.events.append(event)
 
@@ -89,7 +101,7 @@ class VirtualCalendar:
                         continue
 
                     # Check if sentence contains a date reference
-                    event_date = _extract_event_date(sentence, session_date)
+                    event_date, raw_expression = _extract_event_date(sentence, session_date)
 
                     # Only add meaningful sentences (not greetings/filler)
                     if _is_meaningful(sentence):
@@ -100,7 +112,137 @@ class VirtualCalendar:
                             session_id=sid,
                             session_idx=i,
                             speaker=role,
+                            raw_expression=raw_expression,
                         )
+
+    # ------------------------------------------------------------------
+    # Time-window pre-filtering
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _parse_time_window(
+        question: str, question_date: datetime,
+    ) -> Optional[tuple[datetime, datetime]]:
+        """Extract a date range from temporal cues in *question*.
+
+        Returns ``(start, end)`` or ``None`` when no temporal cue is found.
+
+        Supported patterns:
+        - "in May 2023"          -> (2023-05-01, 2023-05-31)
+        - "in May"               -> same month, year inferred from question_date
+        - "last week"            -> (question_date - 14d, question_date)
+        - "last month"           -> first-to-last day of previous month
+        - "in the past month"    -> (question_date - 45d, question_date)
+        - "3 weeks ago"          -> (question_date - 28d, question_date - 14d)
+        - "N days/months ago"    -> similar sliding windows
+        - "in 2023"              -> (2023-01-01, 2023-12-31)
+        """
+        q = question.lower()
+
+        # --- "in <Month> <Year>" -----------------------------------------------
+        month_names_re = "|".join(_MONTH_NAMES.keys())
+        m = re.search(
+            r'\bin\s+(' + month_names_re + r')\s+(\d{4})\b', q,
+        )
+        if m:
+            mn = _MONTH_NAMES[m.group(1)]
+            yr = int(m.group(2))
+            last_day = _cal.monthrange(yr, mn)[1]
+            return (datetime(yr, mn, 1), datetime(yr, mn, last_day, 23, 59, 59))
+
+        # --- "<Month> <Year>" without leading "in" ----------------------------
+        m = re.search(
+            r'\b(' + month_names_re + r')\s+(\d{4})\b', q,
+        )
+        if m:
+            mn = _MONTH_NAMES[m.group(1)]
+            yr = int(m.group(2))
+            last_day = _cal.monthrange(yr, mn)[1]
+            return (datetime(yr, mn, 1), datetime(yr, mn, last_day, 23, 59, 59))
+
+        # --- "in <Month>" (no year) -------------------------------------------
+        m = re.search(
+            r'\bin\s+(' + month_names_re + r')\b(?!\s+\d{4})', q,
+        )
+        if m:
+            mn = _MONTH_NAMES[m.group(1)]
+            yr = question_date.year
+            last_day = _cal.monthrange(yr, mn)[1]
+            return (datetime(yr, mn, 1), datetime(yr, mn, last_day, 23, 59, 59))
+
+        # --- "N weeks/days/months ago" -----------------------------------------
+        m = re.search(r'(\d+)\s+(day|days|week|weeks|month|months)\s+ago', q)
+        if m:
+            n = int(m.group(1))
+            unit = m.group(2).rstrip("s")
+            if unit == "week":
+                end = question_date - timedelta(days=max(n * 7 - 7, 0))
+                start = question_date - timedelta(days=n * 7 + 7)
+                return (start, end)
+            elif unit == "day":
+                end = question_date - timedelta(days=max(n - 1, 0))
+                start = question_date - timedelta(days=n + 7)
+                return (start, end)
+            elif unit == "month":
+                end = question_date - timedelta(days=max((n - 1) * 30, 0))
+                start = question_date - timedelta(days=(n + 1) * 30)
+                return (start, end)
+
+        # --- "last week" ------------------------------------------------------
+        if re.search(r'\blast\s+week\b', q):
+            return (question_date - timedelta(days=14), question_date)
+
+        # --- "last month" -----------------------------------------------------
+        if re.search(r'\blast\s+month\b', q):
+            first_of_cur = question_date.replace(day=1)
+            end = first_of_cur - timedelta(days=1)  # last day of prev month
+            start = end.replace(day=1)
+            return (start, datetime(end.year, end.month, end.day, 23, 59, 59))
+
+        # --- "in the past month" / "past few weeks" / "recently" --------------
+        if re.search(r'\b(?:past|recent)\s+(?:month|few weeks|weeks)\b', q) or \
+           re.search(r'\brecently\b', q):
+            return (question_date - timedelta(days=45), question_date)
+
+        # --- "in <year>" -----------------------------------------------------
+        m = re.search(r'\bin\s+(\d{4})\b', q)
+        if m:
+            yr = int(m.group(1))
+            if 1900 <= yr <= 2100:
+                return (datetime(yr, 1, 1), datetime(yr, 12, 31, 23, 59, 59))
+
+        return None
+
+    def filter_events_by_time_window(
+        self,
+        question: str,
+        question_date: Optional[datetime] = None,
+        margin_days: int = 14,
+    ) -> list[CalendarEvent]:
+        """Parse temporal cues from *question* and filter events to that window.
+
+        Returns only events within the parsed time window +/- *margin_days*.
+        If no temporal cue is found, returns **all** events (no filtering).
+        """
+        if question_date is None:
+            if self.events:
+                question_date = max(e.session_date for e in self.events)
+            else:
+                return list(self.events)
+
+        window = self._parse_time_window(question, question_date)
+        if window is None:
+            return list(self.events)
+
+        start, end = window
+        margin = timedelta(days=margin_days)
+        lo = start - margin
+        hi = end + margin
+
+        return [
+            e for e in self.events
+            if lo <= e.session_date <= hi or lo <= e.event_date <= hi
+        ]
 
     def query(self, question: str, question_date: Optional[datetime] = None) -> str:
         """Answer a temporal question using the calendar.
@@ -113,8 +255,26 @@ class VirtualCalendar:
         if question_date is None and self.events:
             question_date = max(e.session_date for e in self.events)
 
-        # Find relevant events
+        # --- Time-window pre-filtering ----------------------------------------
+        # Narrow events to the relevant time window BEFORE keyword matching.
+        # This prevents matching events from the wrong time period (e.g. a
+        # "MoMA visit" from January when the question asks about March).
+        filtered_events = self.filter_events_by_time_window(
+            question, question_date,
+        )
+        # Build a temporary topic index over only the filtered events
+        saved_by_topic = self._by_topic
+        self._by_topic = {}
+        for ev in filtered_events:
+            for word in _extract_keywords(ev.description):
+                self._by_topic.setdefault(word, []).append(ev)
+
+        # Find relevant events (now searches only within the time window)
         relevant = self._find_relevant_events(keywords)
+
+        # Restore the full topic index immediately
+        self._by_topic = saved_by_topic
+
         if not relevant:
             return ""
 
@@ -187,10 +347,11 @@ class VirtualCalendar:
                 f"question date is {question_date.strftime('%Y/%m/%d')}"
             )
 
-        # --- "Which happened first?" / "before or after" ---
+        # --- "Which happened first?" / "before or after" / "who X first" ---
         order_match = re.search(
             r'(which.*first)|(before|after)\s+(my|the|i)|(happened.*first)|(more recent)'
-            r'|(graduated.*first)|(came.*first)|(did.*first)',
+            r'|(graduated.*first)|(came.*first)|(did.*first)|(became.*first)'
+            r'|(who.*first)|(meet.*first)|(started.*first)',
             q_lower,
         )
         if order_match and len(relevant) >= 2:
@@ -198,9 +359,10 @@ class VirtualCalendar:
                 f"CALENDAR ANSWER: Chronological order:"
             )
             for i, ev in enumerate(relevant[:5], 1):
+                raw_tag = f" [expr: \"{ev.raw_expression}\"]" if ev.raw_expression else ""
                 result_parts.append(
                     f"  {i}. {ev.event_date.strftime('%Y/%m/%d')} — {ev.description[:80]} "
-                    f"(Session {ev.session_idx + 1})"
+                    f"(Session {ev.session_idx + 1}){raw_tag}"
                 )
             result_parts.append(f"  FIRST: {relevant[0].description[:80]}")
             result_parts.append(f"  LAST: {relevant[-1].description[:80]}")
@@ -237,14 +399,17 @@ class VirtualCalendar:
         if list_order_match and len(relevant) >= 2 and not result_parts:
             result_parts.append("CALENDAR ANSWER: Chronological order:")
             for i, ev in enumerate(relevant[:6], 1):
+                raw_tag = f" [expr: \"{ev.raw_expression}\"]" if ev.raw_expression else ""
                 result_parts.append(
                     f"  {i}. {ev.event_date.strftime('%Y/%m/%d')} — {ev.description[:80]} "
-                    f"(Session {ev.session_idx + 1})"
+                    f"(Session {ev.session_idx + 1}){raw_tag}"
                 )
 
-        # --- "How long had I been X when Y?" ---
+        # --- "How long had I been X when Y?" / "How long have I been X before Y?" ---
         how_long_when_match = re.search(
-            r'how long (?:had|have) (?:i|the user) been\s+(.+?)\s+when',
+            r'how long (?:had|have) (?:i|the user) been\s+(.+?)\s+(?:when|before|until|by the time)'
+            r'|how long (?:did|have) (?:i|the user)\s+(?:use|take|wait|work|practice|play|study|train)'
+            r'\s+(.+?)\s+(?:before|until|when)',
             q_lower,
         )
         if how_long_when_match and len(relevant) >= 2 and not result_parts:
@@ -274,6 +439,52 @@ class VirtualCalendar:
                 f"{last.event_date.strftime('%Y/%m/%d')})"
             )
 
+        # --- "How long did it take to finish X" / "How long did I take" ---
+        finish_match = re.search(
+            r'how long (?:did (?:i|it)|have i)\s+(?:take|taken)\s+to\s+(?:finish|complete|read)',
+            q_lower,
+        )
+        if finish_match and len(relevant) >= 2 and not result_parts:
+            first = relevant[0]
+            last = relevant[-1]
+            days = abs((last.event_date - first.event_date).days)
+            weeks = round(days / 7, 1)
+            result_parts.append(
+                f"CALENDAR ANSWER: {days} days (~{weeks} weeks) "
+                f"from first mention ({first.event_date.strftime('%Y/%m/%d')}: "
+                f"{first.description[:60]}) to last mention ("
+                f"{last.event_date.strftime('%Y/%m/%d')}: {last.description[:60]})"
+            )
+
+        # --- "What X last Saturday?" / "Who did I Y last Tuesday?" ---
+        # Resolve relative day references in the question itself
+        rel_day_match = re.search(
+            r'last\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)',
+            q_lower,
+        )
+        if rel_day_match and relevant and not result_parts:
+            # Show events around the resolved date
+            result_parts.append("CALENDAR ANSWER: Events near that date:")
+            for ev in relevant[:8]:
+                raw_tag = f" [expr: \"{ev.raw_expression}\"]" if ev.raw_expression else ""
+                result_parts.append(
+                    f"  {ev.event_date.strftime('%Y/%m/%d')} — {ev.description[:100]} "
+                    f"[{ev.speaker}] (Session {ev.session_idx + 1}){raw_tag}"
+                )
+
+        # --- "How many X before Y?" (count events before a reference event) ---
+        count_before_match = re.search(
+            r'how many\s+(.+?)\s+(?:before|prior to|until)',
+            q_lower,
+        )
+        if count_before_match and len(relevant) >= 2 and not result_parts:
+            result_parts.append(f"CALENDAR ANSWER: {len(relevant)} relevant events found:")
+            for i, ev in enumerate(relevant[:10], 1):
+                raw_tag = f" [expr: \"{ev.raw_expression}\"]" if ev.raw_expression else ""
+                result_parts.append(
+                    f"  {i}. {ev.event_date.strftime('%Y/%m/%d')} — {ev.description[:80]}{raw_tag}"
+                )
+
         # --- "Who X first/second/third" ---
         who_order_match = re.search(
             r'who\s+(?:\w+\s+)?(first|second|third|earliest|latest)',
@@ -282,8 +493,9 @@ class VirtualCalendar:
         if who_order_match and len(relevant) >= 2 and not result_parts:
             result_parts.append("CALENDAR ANSWER: Chronological order:")
             for i, ev in enumerate(relevant[:5], 1):
+                raw_tag = f" [expr: \"{ev.raw_expression}\"]" if ev.raw_expression else ""
                 result_parts.append(
-                    f"  {i}. {ev.event_date.strftime('%Y/%m/%d')} — {ev.description[:80]}"
+                    f"  {i}. {ev.event_date.strftime('%Y/%m/%d')} — {ev.description[:80]}{raw_tag}"
                 )
 
         # --- Timeline summary (always include for temporal context) ---
@@ -297,9 +509,10 @@ class VirtualCalendar:
                     d = (question_date - ev.event_date).days
                     if d > 0:
                         days_ago = f" [{d} days before question date]"
+                raw_tag = f" [expr: \"{ev.raw_expression}\"]" if ev.raw_expression else ""
                 result_parts.append(
                     f"  {ev.event_date.strftime('%Y/%m/%d')} — {ev.description[:100]} "
-                    f"[{ev.speaker}] (Session {ev.session_idx + 1}){days_ago}"
+                    f"[{ev.speaker}] (Session {ev.session_idx + 1}){days_ago}{raw_tag}"
                 )
 
         # --- Knowledge change detection ---
@@ -403,7 +616,7 @@ class CalendarEvent:
 
     __slots__ = (
         "description", "session_date", "event_date",
-        "session_id", "session_idx", "speaker",
+        "session_id", "session_idx", "speaker", "raw_expression",
     )
 
     def __init__(
@@ -414,6 +627,7 @@ class CalendarEvent:
         session_id: str = "",
         session_idx: int = 0,
         speaker: str = "user",
+        raw_expression: str = "",
     ):
         self.description = description
         self.session_date = session_date
@@ -421,6 +635,7 @@ class CalendarEvent:
         self.session_id = session_id
         self.session_idx = session_idx
         self.speaker = speaker
+        self.raw_expression = raw_expression
 
 
 # --- Helper functions ---
@@ -481,8 +696,14 @@ def _is_meaningful(sentence: str) -> bool:
     return True
 
 
-def _extract_event_date(sentence: str, session_date: datetime) -> Optional[datetime]:
-    """Extract a specific date mentioned in a sentence."""
+def _extract_event_date(sentence: str, session_date: datetime) -> tuple[Optional[datetime], str]:
+    """Extract a specific date mentioned in a sentence.
+
+    Returns (resolved_date, raw_expression) where raw_expression is the
+    original relative date text that was matched (e.g. "last Saturday",
+    "3 days ago", "Valentine's day").  Empty string when no temporal
+    expression was found and the session_date is used as default.
+    """
     # "on May 5th", "on January 15"
     month_match = re.search(
         r'(?:on|in|during)\s+'
@@ -496,7 +717,7 @@ def _extract_event_date(sentence: str, session_date: datetime) -> Optional[datet
             day = int(month_match.group(2))
             year = session_date.year
             dt = datetime.strptime(f"{month_name} {day} {year}", "%B %d %Y")
-            return dt
+            return dt, month_match.group(0)
         except ValueError:
             pass
 
@@ -504,28 +725,87 @@ def _extract_event_date(sentence: str, session_date: datetime) -> Optional[datet
     year_match = re.search(r'\bin (20\d{2})\b', sentence)
     if year_match:
         try:
-            return datetime(int(year_match.group(1)), 6, 15)  # mid-year estimate
+            return datetime(int(year_match.group(1)), 6, 15), year_match.group(0)  # mid-year estimate
         except ValueError:
             pass
 
     # "last week", "3 days ago", "yesterday"
-    if "yesterday" in sentence.lower():
-        return session_date - timedelta(days=1)
+    lower = sentence.lower()
+
+    if "yesterday" in lower:
+        return session_date - timedelta(days=1), "yesterday"
 
     ago_match = re.search(r'(\d+)\s+(days?|weeks?|months?)\s+ago', sentence, re.IGNORECASE)
     if ago_match:
         num = int(ago_match.group(1))
         unit = ago_match.group(2).lower().rstrip("s")
+        raw = ago_match.group(0)
         if unit == "day":
-            return session_date - timedelta(days=num)
+            return session_date - timedelta(days=num), raw
         elif unit == "week":
-            return session_date - timedelta(weeks=num)
+            return session_date - timedelta(weeks=num), raw
         elif unit == "month":
-            return session_date - timedelta(days=num * 30)
+            return session_date - timedelta(days=num * 30), raw
 
-    if "last week" in sentence.lower():
-        return session_date - timedelta(weeks=1)
-    if "last month" in sentence.lower():
-        return session_date - timedelta(days=30)
+    if "last week" in lower:
+        return session_date - timedelta(weeks=1), "last week"
+    if "last month" in lower:
+        return session_date - timedelta(days=30), "last month"
+    if "this past weekend" in lower:
+        days_since_sat = (session_date.weekday() - 5) % 7
+        if days_since_sat == 0:
+            days_since_sat = 7
+        return session_date - timedelta(days=days_since_sat), "this past weekend"
+    if "last weekend" in lower:
+        # Find the most recent Saturday before session_date
+        days_since_sat = (session_date.weekday() - 5) % 7
+        if days_since_sat == 0:
+            days_since_sat = 7  # if today is Saturday, go to last Saturday
+        return session_date - timedelta(days=days_since_sat), "last weekend"
 
-    return session_date  # default to session date
+    # "last Saturday", "last Tuesday", etc.
+    day_names = {
+        "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+        "friday": 4, "saturday": 5, "sunday": 6,
+    }
+    last_day_match = re.search(
+        r'last\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)',
+        lower,
+    )
+    if last_day_match:
+        target_day = day_names[last_day_match.group(1)]
+        days_back = (session_date.weekday() - target_day) % 7
+        if days_back == 0:
+            days_back = 7
+        return session_date - timedelta(days=days_back), last_day_match.group(0)
+
+    # "this Monday", "this Friday"
+    this_day_match = re.search(
+        r'this\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)',
+        lower,
+    )
+    if this_day_match:
+        target_day = day_names[this_day_match.group(1)]
+        days_fwd = (target_day - session_date.weekday()) % 7
+        return session_date + timedelta(days=days_fwd), this_day_match.group(0)
+
+    # Named holidays — resolve to session year
+    year = session_date.year
+    if "valentine" in lower:
+        return datetime(year, 2, 14), "Valentine's day"
+    if "christmas" in lower:
+        return datetime(year, 12, 25), "Christmas"
+    if "new year" in lower:
+        # "new year's" usually means Jan 1
+        return datetime(year, 1, 1), "New Year's"
+    if "halloween" in lower:
+        return datetime(year, 10, 31), "Halloween"
+    if "thanksgiving" in lower:
+        # US Thanksgiving: 4th Thursday of November
+        nov1 = datetime(year, 11, 1)
+        first_thu = (3 - nov1.weekday()) % 7
+        return datetime(year, 11, 1 + first_thu + 21), "Thanksgiving"
+    if "independence day" in lower or "fourth of july" in lower or "4th of july" in lower:
+        return datetime(year, 7, 4), "Independence Day"
+
+    return session_date, ""  # default to session date, no raw expression
