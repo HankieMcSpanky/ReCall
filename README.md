@@ -2,7 +2,7 @@
 
 **The universal memory layer for AI.** Local-first. Private. Open source.
 
-**80.6% on LongMemEval** with full ingestion pipeline (19,195 sessions → 19,195 memories).
+**82.8% on LongMemEval** with full ingestion pipeline (19,195 sessions → 19,195 memories).
 
 ```bash
 pip install recall-ai
@@ -23,7 +23,7 @@ results = store.recall("web framework internals")
 
 | Feature | Details |
 |---------|---------|
-| **LongMemEval benchmark** | 80.6% overall, 98.6% user fact recall |
+| **LongMemEval benchmark** | 82.8% overall, 98.6% user fact recall |
 | Local-first (SQLite) | All data stays on your machine |
 | MCP server | Works with Claude Desktop, VS Code Copilot, Cursor |
 | Local LLM support | Ollama, LM Studio, Jan, llama.cpp, vLLM, and more |
@@ -288,16 +288,16 @@ Full pipeline: ingest → store → recall → answer. Real ingestion, real retr
 
 | Category | Score |
 |----------|-------|
-| User fact recall | **98.6%** |
-| Assistant fact recall | **98.2%** |
-| Multi-session | **81.2%** |
-| Knowledge update | **73.1%** |
-| Preference | **76.7%** |
-| Temporal reasoning | **73.7%** |
-| **Overall** | **80.6%** |
+| User fact recall | **95.7%** |
+| Assistant fact recall | **96.4%** |
+| Multi-session | **83.5%** |
+| Knowledge update | **71.8%** |
+| Preference | **73.3%** |
+| Temporal reasoning | **78.2%** |
+| **Overall** | **82.8%** |
 
 ```
-Ingestion: 19,195 sessions → 19,195 memories (407s)
+Ingestion: 19,195 sessions → 19,195 memories
 ```
 
 Run the benchmark yourself:
